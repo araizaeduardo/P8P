@@ -25,7 +25,7 @@ class AirtableNode implements NodeInterface
         return [
             'type' => 'airtable', 'name' => 'Airtable', 'category' => 'Community', 'icon' => 'Table',
             'is_start' => false, 'description' => 'Crea y actualiza registros; lista una página de una tabla de Airtable.',
-            'help_text' => 'Credencial generic_bearer: API Key = Personal Access Token vigente con acceso a la base y scopes data.records:read/write. fields acepta objeto o JSON; PATCH conserva campos omitidos y envía null, false, [] y texto vacío explícitos. Lista hasta 100 registros por ejecución; reutiliza data.offset para continuar. No registra triggers ni renueva tokens.',
+            'help_text' => 'Credencial generic_bearer: API Key = Personal Access Token vigente con acceso a la base y scopes data.records:read/write. fields acepta objeto o JSON; PATCH conserva campos omitidos y envía null, false, [] y texto vacío explícitos. Lista hasta 100 registros por ejecución; reutiliza data.offset para continuar. No renueva tokens. Este nodo ejecuta acciones. Configura eventos disponibles por separado en Triggers con un inicio Start o Evento de servicio; consulta catálogo y docs/triggers.md.',
             'parameters' => [
                 'credential_id' => ['type' => 'credential', 'required' => true, 'label' => 'Credencial Airtable (PAT)'],
                 'operation' => ['type' => 'select', 'required' => true, 'label' => 'Operación', 'default' => 'create_record', 'options' => [

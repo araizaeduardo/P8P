@@ -20,7 +20,7 @@ class TypeformNode implements NodeInterface
         return [
             'type' => 'typeform', 'name' => 'Typeform', 'category' => 'Community', 'icon' => 'ClipboardList', 'is_start' => false,
             'description' => 'Consulta una página de respuestas o busca una respuesta mediante included_response_ids.',
-            'help_text' => 'generic_bearer: API Key = token personal u OAuth con responses:read. La consulta individual usa el endpoint de colección con included_response_ids; no hay ruta individual. Una página por ejecución, hasta 1000 respuestas. before/after usan el token de respuesta, diferente del token de credenciales. Datos recientes pueden tardar unos 30 minutos. Elige el centro de datos de tu cuenta; no se descubren ni siguen URLs remotas. No implementa el trigger form_response ni renovación de tokens.',
+            'help_text' => 'generic_bearer: API Key = token personal u OAuth con responses:read. La consulta individual usa el endpoint de colección con included_response_ids; no hay ruta individual. Una página por ejecución, hasta 1000 respuestas. before/after usan el token de respuesta, diferente del token de credenciales. Datos recientes pueden tardar unos 30 minutos. Elige el centro de datos de tu cuenta; no se descubren ni siguen URLs remotas. No renueva tokens. Este nodo ejecuta acciones. Configura eventos disponibles por separado en Triggers con un inicio Start o Evento de servicio; consulta catálogo y docs/triggers.md.',
             'parameters' => [
                 'credential_id' => ['type' => 'credential', 'required' => true, 'label' => 'Credencial Typeform'],
                 'operation' => ['type' => 'select', 'required' => true, 'label' => 'Operación', 'default' => 'list_responses', 'options' => [

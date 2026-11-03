@@ -7,8 +7,9 @@ $isInstalled = file_exists($envFile);
 $step = (int)($_GET['step'] ?? 1);
 
 // Permitir visualizar el paso 3 recién completado o si viene forzado
-if ($isInstalled && !isset($_GET['force']) &&$step !== 3) {
-    die("P8P ya está instalado. Si deseas reinstalar, elimina el archivo .env o ejecuta /install.php?force=1");
+if ($isInstalled && ($step !== 3 || $_SERVER['REQUEST_METHOD'] === 'POST')) {
+    http_response_code(403);
+    die('P8P ya está instalado. Utiliza las migraciones incrementales desde CLI para actualizarlo.');
 }
 
 $error = '';$success = '';
@@ -35,7 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&$step === 2) {
     $adminUser = trim($_POST['admin_user'] ?? 'admin');
     $adminPass = trim($_POST['admin_pass'] ?? '');
 
-    if (empty($adminUser) || empty($adminPass)) {$error = "El usuario y la contraseña del Administrador son obligatorios.";
+    if (!$allRequirementsMet || !preg_match('/^[a-zA-Z0-9_]{1,64}$/D', $dbName) || !ctype_digit($dbPort) || (int)$dbPort < 1 || (int)$dbPort > 65535) {
+        $error = 'Comprueba requisitos, nombre de base de datos y puerto.';
+    } elseif (preg_match('/[\r\n\x00]/', implode('', [$dbHost,$dbUser,$dbPass,$adminUser,$adminPass]))) {
+        $error = 'Los valores de configuración no pueden contener saltos de línea.';
+    } elseif (empty($adminUser) || empty($adminPass)) {$error = "El usuario y la contraseña del Administrador son obligatorios.";
     } else {
         try {
             // 1. Probar conexión PDO
@@ -90,9 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&$step === 2) {
             ";
 
             $pdo->exec($schema);
+            require_once __DIR__ . '/../vendor/autoload.php';
+            \P8P\Core\TriggerSchema::install($pdo);
 
             // 4. Generar archivo .env unificado
-            $appSecret = base64_encode("strong_secret_key_for_p8p_encryption_2026");
+            $appSecret = base64_encode(random_bytes(32));
             $adminSecretKey = bin2hex(random_bytes(16));
 
             $envContent  = "# Configuración del Sistema\n";
@@ -115,7 +122,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&$step === 2) {
             $envContent .= "ADMIN_PASS={$adminPass}\n";
             $envContent .= "ADMIN_SECRET_KEY={$adminSecretKey}\n";
 
-            file_put_contents($envFile,$envContent);
+            // Exclusive creation prevents concurrent requests from replacing an existing key.
+            $envHandle = fopen($envFile, 'x');
+            if ($envHandle === false) {
+                throw new RuntimeException('No se pudo crear el archivo de configuración.');
+            }
+            $written = fwrite($envHandle, $envContent);
+            fclose($envHandle);
+            if ($written !== strlen($envContent)) {
+                unlink($envFile);
+                throw new RuntimeException('No se pudo guardar el archivo de configuración completo.');
+            }
+            chmod($envFile, 0600);
 
             // config/database.php carga los valores desde .env; no duplicar credenciales.
 

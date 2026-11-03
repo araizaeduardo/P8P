@@ -26,7 +26,7 @@ class DiscordNode implements NodeInterface
             'type' => 'discord', 'name' => 'Discord', 'category' => 'Community',
             'description' => 'Envía mensajes y embeds con un bot o webhook y añade reacciones.',
             'icon' => 'MessageCircle', 'is_start' => false,
-            'help_text' => 'Credencial generic_bearer: API Key con JSON {"bot_token":"..."} o {"webhook_url":"..."}. Nunca guardes secretos en parámetros. Bot: VIEW_CHANNEL, SEND_MESSAGES, EMBED_LINKS; reacciones: READ_MESSAGE_HISTORY y ADD_REACTIONS. Mentions desactivadas salvo IDs explícitos; no permite everyone/here. No recibe eventos: Gateway y suscripciones requieren infraestructura adicional. Salida: data.id y data.channel_id.',
+            'help_text' => 'Credencial generic_bearer: API Key con JSON {"bot_token":"..."} o {"webhook_url":"..."}. Nunca guardes secretos en parámetros. Bot: VIEW_CHANNEL, SEND_MESSAGES, EMBED_LINKS; reacciones: READ_MESSAGE_HISTORY y ADD_REACTIONS. Mentions desactivadas salvo IDs explícitos; no permite everyone/here. Gateway completo requiere un proceso residente; el polling de mensajes creados disponible por separado no cubre ediciones ni borrados. Salida: data.id y data.channel_id. Este nodo ejecuta acciones. Configura eventos disponibles por separado en Triggers con un inicio Start o Evento de servicio; consulta catálogo y docs/triggers.md.',
             'parameters' => [
                 'credential_id' => ['type' => 'credential', 'required' => true, 'label' => 'Credencial de Discord'],
                 'operation' => ['type' => 'select', 'required' => true, 'label' => 'Operación', 'default' => 'send_message', 'options' => [

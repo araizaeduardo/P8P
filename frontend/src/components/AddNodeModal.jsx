@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { X, Box, Sparkles, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function AddNodeModal({ isOpen, onClose, onAddNode }) {
+    return isOpen ? <AddNodeModalContent onClose={onClose} onAddNode={onAddNode} /> : null;
+}
+
+function AddNodeModalContent({ onClose, onAddNode }) {
     const [nodes, setNodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -10,43 +14,41 @@ export default function AddNodeModal({ isOpen, onClose, onAddNode }) {
     const itemsPerPage = 6; // Cantidad de nodos por página
 
     useEffect(() => {
-        if (isOpen) {
-            setSearchQuery('');
-            setCurrentPage(1);
-            fetchNodes();
-        }
-    }, [isOpen]);
+        let active = true;
+        const controller = new AbortController();
+        const fetchNodes = async () => {
+            try {
+                const token = localStorage.getItem('p8p_token');
 
-    const fetchNodes = async () => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('p8p_token');
+                const res = await fetch('./nodes.php', {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    }
+                });
 
-            const res = await fetch('./nodes.php', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                if (res.status === 401) {
+                    localStorage.removeItem('p8p_token');
+                    localStorage.removeItem('p8p_user');
+                    window.location.reload();
+                    return;
                 }
-            });
 
-            if (res.status === 401) {
-                localStorage.removeItem('p8p_token');
-                localStorage.removeItem('p8p_user');
-                window.location.reload();
-                return;
+                const data = await res.json();
+                if (active && data.success) {
+                    setNodes(data.nodes || []);
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') console.error('Error al cargar nodos dinámicos:', err);
+            } finally {
+                if (active) setLoading(false);
             }
-
-            const data = await res.json();
-            if (data.success) {
-                setNodes(data.nodes || []);
-            }
-        } catch (err) {
-            console.error('Error al cargar nodos dinámicos:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+        };
+        fetchNodes();
+        return () => { active = false; controller.abort(); };
+    }, []);
 
     // Filtrar nodos basándose en el input de búsqueda
     const filteredNodes = useMemo(() => {
@@ -72,8 +74,6 @@ export default function AddNodeModal({ isOpen, onClose, onAddNode }) {
         setSearchQuery(e.target.value);
         setCurrentPage(1);
     };
-
-    if (!isOpen) return null;
 
     // Renderiza el ícono dinámico devuelto por PHP o Box por defecto
     const renderIcon = (iconName) => {

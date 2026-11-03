@@ -48,6 +48,22 @@ $structure = json_encode([
 try {
     $config = require __DIR__ . '/../config/database.php';
     $db = Database::getConnection($config);
+    $db->beginTransaction();
+    $old = $db->prepare('SELECT structure FROM workflows WHERE id=? FOR UPDATE');
+    $old->execute([$workflowId]);
+    $previousStructure = $old->fetchColumn();
+    if ($previousStructure && \P8P\Core\WorkflowRuntime::hash(json_decode($previousStructure, true, 512, JSON_THROW_ON_ERROR)) !== \P8P\Core\WorkflowRuntime::hash(json_decode($structure, true, 512, JSON_THROW_ON_ERROR))) {
+        // Before the additive migration there are no receivers to pause.
+        try {
+            $db->query('SELECT id FROM trigger_configs LIMIT 0');
+            $pause = $db->prepare("UPDATE trigger_configs SET enabled=0,status='paused',version=version+1,lease_token=NULL,lease_until=NULL WHERE workflow_id=?");
+            $pause->execute([$workflowId]);
+        } catch (\PDOException $e) {
+            if (!in_array($e->getCode(), ['42S02', '42P01'], true)) {
+                throw $e;
+            }
+        }
+    }
 
     $stmt = $db->prepare("
         INSERT INTO workflows (id, name, description, structure, is_active, updated_at)
@@ -65,6 +81,7 @@ try {
         ':description' => $description,
         ':structure' => $structure
     ]);
+    $db->commit();
 
     echo json_encode([
         'success' => true,
@@ -72,6 +89,9 @@ try {
         'message' => 'Workflow guardado correctamente en MariaDB'
     ]);
 } catch (\Throwable $e) {
+    if (isset($db) && $db->inTransaction()) {
+        $db->rollBack();
+    }
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Error en base de datos: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'No se pudo guardar el workflow. Comprueba la conexión y la estructura.']);
 }

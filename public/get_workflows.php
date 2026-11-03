@@ -29,7 +29,7 @@ try {
 
     if ($workflowId) {
         // Consultar un workflow específico
-        $stmt = $db->prepare("SELECT id, name, description, structure, created_at, updated_at FROM workflows WHERE id = :id LIMIT 1");
+        $stmt = $db->prepare("SELECT id, name, description, structure, is_active, created_at, updated_at FROM workflows WHERE id = :id LIMIT 1");
         $stmt->execute([':id' => $workflowId]);
         $workflow = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -45,7 +45,7 @@ try {
         }
     } else {
         // Listar los últimos 50 workflows creados
-        $stmt = $db->query("SELECT id, name, description, created_at, updated_at FROM workflows ORDER BY updated_at DESC LIMIT 50");
+        $stmt = $db->query("SELECT id, name, description, is_active, created_at, updated_at FROM workflows ORDER BY updated_at DESC LIMIT 50");
         $workflows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         echo json_encode([

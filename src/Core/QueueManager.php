@@ -54,17 +54,19 @@ class QueueManager
         }
         $this->db->beginTransaction();
         try {
+            $lock = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
             $stmt = $this->db->prepare("SELECT id, workflow_id, payload, attempts FROM queue_jobs
-                WHERE status = 'pending' AND (available_at IS NULL OR available_at <= UTC_TIMESTAMP())
-                ORDER BY created_at ASC, id ASC LIMIT :limit FOR UPDATE");
+                WHERE status = 'pending' AND (available_at IS NULL OR available_at <= :now)
+                ORDER BY created_at ASC, id ASC LIMIT :limit" . $lock);
             $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':now', gmdate('Y-m-d H:i:s'));
             $stmt->execute();
             $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $claim = $this->db->prepare("UPDATE queue_jobs SET status = 'processing', claim_token = :claim,
-                attempts = attempts + 1, updated_at = UTC_TIMESTAMP() WHERE id = :id AND status = 'pending'");
+                attempts = attempts + 1, updated_at = :updated_at WHERE id = :id AND status = 'pending'");
             foreach ($jobs as &$job) {
                 $job['claim_token'] = bin2hex(random_bytes(32));
-                $claim->execute([':claim' => $job['claim_token'], ':id' => $job['id']]);
+                $claim->execute([':updated_at' => gmdate('Y-m-d H:i:s'), ':claim' => $job['claim_token'], ':id' => $job['id']]);
                 if ($claim->rowCount() !== 1) {
                     throw new RuntimeException('No se pudo reclamar el trabajo de forma exclusiva.');
                 }
@@ -73,7 +75,9 @@ class QueueManager
             $this->db->commit();
             return $jobs;
         } catch (\Throwable $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             throw $e;
         }
     }
@@ -92,9 +96,9 @@ class QueueManager
     {
         unset($result['checkpoint']);
         $stmt = $this->db->prepare("UPDATE queue_jobs SET status = :status, result = :result,
-            error_message = :error, claim_token = NULL, updated_at = UTC_TIMESTAMP()
+            error_message = :error, claim_token = NULL, updated_at = :updated_at
             WHERE id = :id AND status = 'processing' AND claim_token = :claim");
-        $stmt->execute([':status' => $status, ':result' => json_encode($result, JSON_THROW_ON_ERROR, 2048),
+        $stmt->execute([':updated_at' => gmdate('Y-m-d H:i:s'), ':status' => $status, ':result' => json_encode($result, JSON_THROW_ON_ERROR, 2048),
             ':error' => $error, ':id' => $id, ':claim' => $token]);
         $this->requireClaim($stmt->rowCount());
     }
@@ -113,10 +117,24 @@ class QueueManager
         unset($publicResult['checkpoint']);
         $stmt = $this->db->prepare("UPDATE queue_jobs SET status = 'pending', payload = :payload,
             available_at = :available_at, result = :result, error_message = NULL, claim_token = NULL,
-            updated_at = UTC_TIMESTAMP() WHERE id = :id AND status = 'processing' AND claim_token = :claim");
-        $stmt->execute([':payload' => json_encode($payload, JSON_THROW_ON_ERROR, 2048),
+            updated_at = :updated_at WHERE id = :id AND status = 'processing' AND claim_token = :claim");
+        $stmt->execute([':updated_at' => gmdate('Y-m-d H:i:s'), ':payload' => json_encode($payload, JSON_THROW_ON_ERROR, 2048),
             ':available_at' => gmdate('Y-m-d H:i:s', $result['resume_at']),
             ':result' => json_encode($publicResult, JSON_THROW_ON_ERROR, 2048), ':id' => $jobId, ':claim' => $claimToken]);
+        $this->requireClaim($stmt->rowCount());
+    }
+
+    /** Trigger continuations contain only encrypted checkpoint material in queue storage. */
+    public function rescheduleEncrypted(string $jobId, string $claimToken, string $eventId, string $ciphertext, int $resumeAt, array $summary): void
+    {
+        $stmt = $this->db->prepare("UPDATE queue_jobs SET status = 'pending', payload = :payload,
+            available_at = :available_at, result = :result, error_message = NULL, claim_token = NULL,
+            updated_at = :updated_at WHERE id = :id AND status = 'processing' AND claim_token = :claim");
+        $stmt->execute([':payload' => json_encode(['trigger_event_id' => $eventId,
+                'trigger_continuation' => $ciphertext], JSON_THROW_ON_ERROR),
+            ':available_at' => gmdate('Y-m-d H:i:s', $resumeAt),
+            ':result' => json_encode($summary, JSON_THROW_ON_ERROR), ':updated_at' => gmdate('Y-m-d H:i:s'),
+            ':id' => $jobId, ':claim' => $claimToken]);
         $this->requireClaim($stmt->rowCount());
     }
 

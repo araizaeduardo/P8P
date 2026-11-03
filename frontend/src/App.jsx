@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Canvas from './components/Canvas.jsx';
 import AddNodeModal from './components/AddNodeModal.jsx';
 import NodeInspector from './components/NodeInspector.jsx';
 import LoadWorkflowModal from './components/LoadWorkflowModal.jsx';
 import CredentialsModal from './components/CredentialsModal.jsx';
 import ExecutionLogsModal from './components/ExecutionLogsModal.jsx';
+import TriggerManager from './components/TriggerManager.jsx';
 import LoginModal from './components/LoginModal.jsx';
 import NewWorkflowModal from './components/NewWorkflowModal.jsx';
 
@@ -25,14 +26,15 @@ import {
 
 export default function App() {
   // Autenticación
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('p8p_token') && localStorage.getItem('p8p_user')));
+  const [user, setUser] = useState(() => localStorage.getItem('p8p_user'));
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isCredentialsOpen, setIsCredentialsOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
+  const [isTriggersOpen, setIsTriggersOpen] = useState(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
   // Lienzo y workflow
@@ -51,21 +53,17 @@ export default function App() {
   // Esquemas de nodos del backend
   const [nodeSchemas, setNodeSchemas] = useState([]);
 
-  // Recuperar la sesión guardada
-  useEffect(() => {
-    const token = localStorage.getItem('p8p_token');
-    const storedUser = localStorage.getItem('p8p_user');
+  // Cerrar sesión
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('p8p_token');
+    localStorage.removeItem('p8p_user');
 
-    if (token && storedUser) {
-      setIsAuthenticated(true);
-      setUser(storedUser);
-    } else {
-      setIsAuthenticated(false);
-    }
+    setIsAuthenticated(false);
+    setUser(null);
   }, []);
 
   // Peticiones autenticadas con Bearer token
-  const authenticatedFetch = async (url, options = {}) => {
+  const authenticatedFetch = useCallback(async (url, options = {}) => {
     const token = localStorage.getItem('p8p_token');
 
     const headers = {
@@ -88,7 +86,7 @@ export default function App() {
     }
 
     return response;
-  };
+  }, [handleLogout]);
 
   // Cargar esquemas después de autenticarse
   useEffect(() => {
@@ -111,21 +109,12 @@ export default function App() {
     };
 
     fetchSchemas();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authenticatedFetch]);
 
   // LoginModal guarda el token y entrega el usuario
   const handleLoginSuccess = (userData) => {
     setIsAuthenticated(true);
     setUser(userData.username);
-  };
-
-  // Cerrar sesión
-  const handleLogout = () => {
-    localStorage.removeItem('p8p_token');
-    localStorage.removeItem('p8p_user');
-
-    setIsAuthenticated(false);
-    setUser(null);
   };
 
   // Confirmación desde NewWorkflowModal
@@ -145,6 +134,7 @@ export default function App() {
     setIsLoadModalOpen(false);
     setIsCredentialsOpen(false);
     setIsLogsOpen(false);
+    setIsTriggersOpen(false);
   };
 
   // Copiar ID completo
@@ -454,6 +444,13 @@ export default function App() {
               Credenciales
             </button>
 
+            <button
+                onClick={() => setIsTriggersOpen(true)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700"
+            >
+              Triggers
+            </button>
+
             {/* Logs */}
             <button
                 onClick={() => setIsLogsOpen(true)}
@@ -533,6 +530,9 @@ export default function App() {
               isOpen={isLogsOpen}
               onClose={() => setIsLogsOpen(false)}
           />
+          {isTriggersOpen && (
+              <TriggerManager workflowId={workflowId} nodes={nodes} onClose={() => setIsTriggersOpen(false)} />
+          )}
 
           {/* Inspector */}
           {selectedNode && (

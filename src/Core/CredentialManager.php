@@ -11,7 +11,7 @@ class CredentialManager
     private PDO $db;
     private string $encryptionKey;
 
-    public function __construct()
+    public function __construct(?PDO $db = null)
     {
         // Resolver el entorno aquí para que HTTP, cron y todos los nodos usen la misma clave.
         EnvLoader::load(__DIR__ . '/../../.env', false);
@@ -21,8 +21,7 @@ class CredentialManager
         }
         $this->encryptionKey = hash('sha256', $secret, true);
 
-        $config = require __DIR__ . '/../../config/database.php';
-        $this->db = Database::getConnection($config);
+        $this->db = $db ?? Database::getConnection(require __DIR__ . '/../../config/database.php');
     }
 
     /**

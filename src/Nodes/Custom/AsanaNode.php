@@ -25,7 +25,7 @@ class AsanaNode implements NodeInterface
         return [
             'type' => 'asana', 'name' => 'Asana', 'category' => 'Community', 'icon' => 'CheckCircle',
             'is_start' => false, 'description' => 'Crea tareas, actualiza campos o finalización y añade comentarios.',
-            'help_text' => 'Credencial generic_bearer: API Key = PAT o access token vigente. Scopes OAuth tasks:write / stories:write y acceso al recurso. fields acepta JSON u objeto con name, notes, assignee, completed, due_on, custom_fields; projects solo al crear. completed es booleano; un estado personalizado se envía en custom_fields por GID del campo y opción. PUT solo modifica campos proporcionados; null limpia assignee/due_on/custom fields. Triggers requieren webhook/estado compartido; no están registrados.',
+            'help_text' => 'Credencial generic_bearer: API Key = PAT o access token vigente. Scopes OAuth tasks:write / stories:write y acceso al recurso. fields acepta JSON u objeto con name, notes, assignee, completed, due_on, custom_fields; projects solo al crear. completed es booleano; un estado personalizado se envía en custom_fields por GID del campo y opción. PUT solo modifica campos proporcionados; null limpia assignee/due_on/custom fields. Este nodo ejecuta acciones. Configura eventos disponibles por separado en Triggers con un inicio Start o Evento de servicio; consulta catálogo y docs/triggers.md.',
             'parameters' => [
                 'credential_id' => ['type' => 'credential', 'required' => true, 'label' => 'Credencial Asana'],
                 'operation' => ['type' => 'select', 'required' => true, 'label' => 'Operación', 'default' => 'create_task', 'options' => [

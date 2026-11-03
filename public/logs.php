@@ -40,6 +40,9 @@ try {
     $formattedLogs = array_map(function($log) {
         $resultData  = !empty($log['result']) ? json_decode($log['result'], true) : null;
         $payloadData = !empty($log['payload']) ? json_decode($log['payload'], true) : null;
+        if (isset($payloadData['trigger_event_id'])) {
+            $payloadData = ['trigger_event_id' => $payloadData['trigger_event_id']];
+        }
 
         $executionTimeMs = 0;
         if (isset($resultData['execution_time_ms'])) {

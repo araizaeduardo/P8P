@@ -1,50 +1,52 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FolderOpen, X, Clock } from 'lucide-react';
 
 export default function LoadWorkflowModal({ isOpen, onClose, onLoadWorkflow }) {
+    return isOpen ? <LoadWorkflowModalContent onClose={onClose} onLoadWorkflow={onLoadWorkflow} /> : null;
+}
+
+function LoadWorkflowModalContent({ onClose, onLoadWorkflow }) {
     const [workflows, setWorkflows] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (isOpen) {
-            fetchWorkflows();
-        }
-    }, [isOpen]);
+        let active = true;
+        const controller = new AbortController();
+        const fetchWorkflows = async () => {
+            try {
+                // Extraer el token guardado en el navegador durante el inicio de sesión
+                const token = localStorage.getItem('p8p_token');
 
-    const fetchWorkflows = async () => {
-        setLoading(true);
-        try {
-            // Extraer el token guardado en el navegador durante el inicio de sesión
-            const token = localStorage.getItem('p8p_token');
+                const res = await fetch('./get_workflows.php', {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    }
+                });
 
-            const res = await fetch('./get_workflows.php', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                // Si el backend devuelve 401 Unauthorized, expira la sesión local
+                if (res.status === 401) {
+                    localStorage.removeItem('p8p_token');
+                    localStorage.removeItem('p8p_user');
+                    window.location.reload();
+                    return;
                 }
-            });
 
-            // Si el backend devuelve 401 Unauthorized, expira la sesión local
-            if (res.status === 401) {
-                localStorage.removeItem('p8p_token');
-                localStorage.removeItem('p8p_user');
-                window.location.reload();
-                return;
+                const data = await res.json();
+                if (active && data.success && Array.isArray(data.workflows)) {
+                    setWorkflows(data.workflows);
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') console.error('Error al cargar workflows:', err);
+            } finally {
+                if (active) setLoading(false);
             }
-
-            const data = await res.json();
-            if (data.success && Array.isArray(data.workflows)) {
-                setWorkflows(data.workflows);
-            }
-        } catch (err) {
-            console.error('Error al cargar workflows:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (!isOpen) return null;
+        };
+        fetchWorkflows();
+        return () => { active = false; controller.abort(); };
+    }, []);
 
     return (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">

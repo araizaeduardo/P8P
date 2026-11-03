@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Trash2, HelpCircle, Sliders } from 'lucide-react';
 
 export default function NodeInspector({

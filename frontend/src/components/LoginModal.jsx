@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Lock, LogIn, KeyRound } from 'lucide-react';
+import { useState } from 'react';
+import { Lock, LogIn } from 'lucide-react';
 
 export default function LoginModal({ isOpen, onLoginSuccess }) {
     const [username, setUsername] = useState('admin');
@@ -29,7 +29,7 @@ export default function LoginModal({ isOpen, onLoginSuccess }) {
             } else {
                 setError(data.error || 'Credenciales inválidas');
             }
-        } catch (err) {
+        } catch {
             setError('Error de conexión con el servidor de autenticación');
         } finally {
             setLoading(false);

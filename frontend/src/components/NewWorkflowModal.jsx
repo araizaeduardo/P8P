@@ -1,4 +1,3 @@
-import React from 'react';
 import { FilePlus, AlertTriangle, X } from 'lucide-react';
 
 export default function NewWorkflowModal({ isOpen, onClose, onConfirm }) {

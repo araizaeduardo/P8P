@@ -25,7 +25,7 @@ class LinearNode implements NodeInterface
         return [
             'type' => 'linear', 'name' => 'Linear', 'category' => 'Community', 'icon' => 'CircleDot',
             'is_start' => false, 'description' => 'Crea issues, cambia su estado y asigna o retira un responsable.',
-            'help_text' => 'Credencial generic_bearer, API Key = JSON {"auth_type":"api_key","token":"..."} o {"auth_type":"oauth","token":"..."}. API key usa Authorization directo; OAuth Bearer. Scopes OAuth issues:create para crear, write para cambios; acceso al equipo. assignee_id admite un UUID o null JSON explícito para desasignar; solo un responsable. GraphQL fijo con variables. Triggers Issue create/update pendientes de endpoint y persistencia.',
+            'help_text' => 'Credencial generic_bearer, API Key = JSON {"auth_type":"api_key","token":"..."} o {"auth_type":"oauth","token":"..."}. API key usa Authorization directo; OAuth Bearer. Scopes OAuth issues:create para crear, write para cambios; acceso al equipo. assignee_id admite un UUID o null JSON explícito para desasignar; solo un responsable. GraphQL fijo con variables. Este nodo ejecuta acciones. Configura eventos disponibles por separado en Triggers con un inicio Start o Evento de servicio; consulta catálogo y docs/triggers.md.',
             'parameters' => [
                 'credential_id' => ['type' => 'credential', 'required' => true, 'label' => 'Credencial Linear'],
                 'operation' => ['type' => 'select', 'required' => true, 'label' => 'Operación', 'default' => 'create_issue', 'options' => [

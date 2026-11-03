@@ -1,5 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Key, Plus, Trash2, X, ShieldCheck, Lock } from 'lucide-react';
+
+async function fetchCredentials() {
+    try {
+        const token = localStorage.getItem('p8p_token');
+        const res = await fetch('./credentials.php', {
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+        });
+
+        if (res.status === 401) {
+            localStorage.removeItem('p8p_token');
+            localStorage.removeItem('p8p_user');
+            window.location.reload();
+            return null;
+        }
+
+        const data = await res.json();
+        if (data.success) return data.credentials || [];
+    } catch (err) {
+        console.error('Error al cargar credenciales:', err);
+    }
+    return null;
+}
 
 export default function CredentialsModal({ isOpen, onClose }) {
     const [credentials, setCredentials] = useState([]);
@@ -9,33 +34,19 @@ export default function CredentialsModal({ isOpen, onClose }) {
     const [apiKey, setApiKey] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const fetchCredentials = async () => {
-        try {
-            const token = localStorage.getItem('p8p_token');
-            const res = await fetch('./credentials.php', {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                }
-            });
-
-            if (res.status === 401) {
-                localStorage.removeItem('p8p_token');
-                localStorage.removeItem('p8p_user');
-                window.location.reload();
-                return;
-            }
-
-            const data = await res.json();
-            if (data.success) setCredentials(data.credentials);
-        } catch (err) {
-            console.error('Error al cargar credenciales:', err);
-        }
-    };
-
     useEffect(() => {
-        if (isOpen) fetchCredentials();
+        if (!isOpen) return;
+        let active = true;
+        fetchCredentials().then((list) => {
+            if (active && list !== null) setCredentials(list);
+        });
+        return () => { active = false; };
     }, [isOpen]);
+
+    const refreshCredentials = async () => {
+        const list = await fetchCredentials();
+        if (list !== null) setCredentials(list);
+    };
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -69,7 +80,7 @@ export default function CredentialsModal({ isOpen, onClose }) {
                 setName('');
                 setApiKey('');
                 setIsAdding(false);
-                fetchCredentials();
+                refreshCredentials();
             }
         } catch (err) {
             alert('Error al guardar credencial: ' + err.message);
@@ -97,8 +108,8 @@ export default function CredentialsModal({ isOpen, onClose }) {
                 return;
             }
 
-            fetchCredentials();
-        } catch (err) {
+            refreshCredentials();
+        } catch {
             alert('Error al eliminar credencial');
         }
     };

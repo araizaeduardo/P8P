@@ -1,81 +1,50 @@
 <?php
 
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type");
-header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
-header("Content-Type: application/json");
-
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
-
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use P8P\Core\Database;
-use P8P\Core\Engine;
-use P8P\Nodes\Core\AiAgentNode;
-use P8P\Nodes\Core\HttpRequestNode;
-use P8P\Nodes\Core\IfConditionNode;
-use P8P\Nodes\Core\McpToolNode;
-use P8P\Nodes\Core\SetVariableNode;
-use P8P\Nodes\Core\StartNode;
-use P8P\Nodes\Premium\OllamaChatModelNode;
+use P8P\Core\{CredentialManager, Database, TriggerManager, TriggerRetryException};
 
-$workflowId = $_GET['id'] ?? null;
-
-if (!$workflowId) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Se requiere el parámetro ?id=WORKFLOW_ID']);
+ini_set('display_errors', '0');
+header('Cache-Control: no-store');
+if (!is_string($_GET['trigger_id'] ?? null) || !preg_match('/^[a-f0-9]{32}$/D', $_GET['trigger_id'])) {
+    http_response_code(410);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Configura un receptor verificado desde Triggers; la invocación pública por workflow ID se ha retirado.']);
     exit;
 }
-
 try {
-    // 1. Cargar Workflow desde MariaDB
-    $config = require __DIR__ . '/../config/database.php';
-    $db = Database::getConnection($config);
-
-    $stmt = $db->prepare("SELECT structure, is_active FROM workflows WHERE id = :id");
-    $stmt->execute([':id' => $workflowId]);
-    $row = $stmt->fetch();
-
-    if (!$row) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Workflow no encontrado']);
-        exit;
+    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) {
+        throw new LengthException();
     }
-
-    if (!$row['is_active']) {
-        http_response_code(403);
-        echo json_encode(['error' => 'El workflow está desactivado']);
-        exit;
+    $raw = file_get_contents('php://input', false, null, 0, 1048577);
+    if ($raw === false || strlen($raw) > 1048576) {
+        throw new LengthException();
     }
-
-    $workflowStructure = json_decode($row['structure'], true);
-    $payload = json_decode(file_get_contents('php://input'), true) ?? $_REQUEST;
-
-    // 2. Inicializar el motor y registrar nodos
-    $engine = new Engine();
-    $engine->registerNode(new StartNode());
-    $engine->registerNode(new HttpRequestNode());
-    $engine->registerNode(new SetVariableNode());
-    $engine->registerNode(new AiAgentNode());
-    $engine->registerNode(new OllamaChatModelNode());
-    $engine->registerNode(new McpToolNode());
-    $engine->registerNode(new IfConditionNode());
-
-    // 3. Inyectar datos del webhook como contexto inicial
-    $initialContext = [
-        'webhook' => [
-            'payload' => $payload,
-            'received_at' => date('Y-m-d H:i:s')
-        ]
-    ];
-
-    $result = $engine->executeWorkflow($workflowStructure, $initialContext);
-
-    echo json_encode($result);
-} catch (\Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Error ejecutando Webhook: ' . $e->getMessage()]);
+    $headers = [];
+    foreach (function_exists('getallheaders') ? getallheaders() : [] as $key => $value) {
+        $headers[strtolower($key)] = $value;
+    }
+    foreach ($_SERVER as $key => $value) {
+        if (str_starts_with($key, 'HTTP_')) {
+            $headers[strtolower(str_replace('_', '-', substr($key, 5)))] = $value;
+        }
+    }
+    if (isset($_SERVER['CONTENT_TYPE'])) {
+        $headers['content-type'] = $_SERVER['CONTENT_TYPE'];
+    }
+    $db = Database::getConnection(require __DIR__ . '/../config/database.php');
+    $result = (new TriggerManager($db, new CredentialManager($db)))->receive($_GET['trigger_id'], [
+        'method' => $_SERVER['REQUEST_METHOD'], 'headers' => $headers, 'query' => $_GET, 'raw_body' => $raw]);
+    http_response_code($result['status'] ?? 200);
+    header('Content-Type: ' . ($result['content_type'] ?? 'text/plain'));
+    echo $result['body'] ?? '';
+} catch (LengthException $e) {
+    http_response_code(413);
+} catch (InvalidArgumentException $e) {
+    http_response_code(403);
+} catch (TriggerRetryException $e) {
+    http_response_code(503);
+    header('Retry-After: ' . max(60, min(86400, $e->retryAfter)));
+} catch (Throwable $e) {
+    http_response_code(503);
 }

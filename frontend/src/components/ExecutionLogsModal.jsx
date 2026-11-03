@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../api/client';
 import { X, Activity, CheckCircle2, XCircle, Clock, ChevronRight, RefreshCw } from 'lucide-react';
 
 export default function ExecutionLogsModal({ isOpen, onClose }) {
@@ -6,42 +7,30 @@ export default function ExecutionLogsModal({ isOpen, onClose }) {
     const [loading, setLoading] = useState(false);
     const [selectedLog, setSelectedLog] = useState(null);
 
-    const fetchLogs = async () => {
-        setLoading(true);
+    const fetchLogs = useCallback(async () => {
         try {
-            const token = localStorage.getItem('p8p_token');
-            const res = await fetch('./logs.php', {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                }
-            });
-
-            if (res.status === 401) {
-                localStorage.removeItem('p8p_token');
-                localStorage.removeItem('p8p_user');
-                window.location.reload();
-                return;
-            }
-
-            const data = await res.json();
+            const data = await apiFetch('./logs.php');
             if (data.success) {
                 setLogs(data.logs || []);
-                if (data.logs?.length > 0 && !selectedLog) {
-                    setSelectedLog(data.logs[0]);
-                }
+                setSelectedLog(current => data.logs?.find(log => log.id === current?.id) || data.logs?.[0] || null);
             }
         } catch (err) {
             console.error('Error al cargar logs:', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        if (isOpen) {
-            fetchLogs();
-        }
+        if (!isOpen) return;
+        let cancelled = false;
+        apiFetch('./logs.php').then(data => {
+            if (!cancelled && data.success) {
+                setLogs(data.logs || []);
+                setSelectedLog(current => data.logs?.find(log => log.id === current?.id) || data.logs?.[0] || null);
+            }
+        }).catch(err => console.error('Error al cargar logs:', err));
+        return () => { cancelled = true; };
     }, [isOpen]);
 
     if (!isOpen) return null;
@@ -89,7 +78,8 @@ export default function ExecutionLogsModal({ isOpen, onClose }) {
                             <div className="text-center py-10 text-xs text-slate-500 italic">No hay ejecuciones registradas.</div>
                         ) : (
                             logs.map((log) => {
-                                const isSuccess = log.status === 'completed' || log.result?.status === 'completed';
+                                const isSuccess = log.status === 'completed' && log.result?.status !== 'failed'
+                                    && !Object.values(log.result?.history || {}).some(node => node.status === 'failed');
                                 const isSelected = selectedLog?.id === log.id;
 
                                 return (
@@ -137,8 +127,8 @@ export default function ExecutionLogsModal({ isOpen, onClose }) {
                                 <div className="grid grid-cols-3 gap-3">
                                     <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
                                         <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Estado</div>
-                                        <div className="text-xs font-bold capitalize mt-0.5 text-emerald-400 flex items-center gap-1.5">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> {selectedLog.status}
+                                        <div className={`text-xs font-bold capitalize mt-0.5 flex items-center gap-1.5 ${selectedLog.status === 'failed' || selectedLog.result?.status === 'failed' ? 'text-rose-400' : 'text-slate-200'}`}>
+                                            {selectedLog.status}
                                         </div>
                                     </div>
                                     <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
