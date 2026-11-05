@@ -147,7 +147,7 @@ export default function TriggerManager({ workflowId, nodes = [], onClose }) {
                             </label>
                             {starts.length === 0 && <p className="text-xs text-amber-300">Añade un nodo Inicio o Trigger de servicio y guarda el workflow antes de configurar el evento.</p>}
                             <label className="block space-y-1 text-xs text-slate-300"><span>Credencial cifrada</span>
-                                <select required={!form.provider_key.startsWith('notion_webhook_')} disabled={busy || loading} value={form.credential_id} onChange={(event) => setForm((current) => ({ ...current, credential_id: event.target.value }))} className={input}>
+                                <select required={secrets.some(([, field]) => field.required) && !form.provider_key.startsWith('notion_webhook_')} disabled={busy || loading} value={form.credential_id} onChange={(event) => setForm((current) => ({ ...current, credential_id: event.target.value }))} className={input}>
                                     <option value="">Selecciona una credencial</option>{credentials.map((credential) => <option key={credential.id} value={credential.id}>{credential.name} ({credential.type})</option>)}
                                 </select>
                             </label>

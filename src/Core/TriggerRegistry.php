@@ -3,7 +3,7 @@
 namespace P8P\Core;
 
 use P8P\Interfaces\TriggerProviderInterface;
-use P8P\Core\TriggerProviders\{WebhookProviders, CloudPollingProviders, BusinessPollingProviders, NotionWebhooks};
+use P8P\Core\TriggerProviders\{WebhookProviders, CloudPollingProviders, BusinessPollingProviders, NotionWebhooks, CommerceTriggers};
 
 class TriggerRegistry
 {
@@ -12,7 +12,7 @@ class TriggerRegistry
 
     public function __construct(?array $providers = null)
     {
-        foreach ($providers ?? [new WebhookProviders(), new CloudPollingProviders(), new BusinessPollingProviders(), new NotionWebhooks()] as $provider) {
+        foreach ($providers ?? [new WebhookProviders(), new CloudPollingProviders(), new BusinessPollingProviders(), new NotionWebhooks(), new CommerceTriggers(), new \P8P\Nodes\Custom\RssAtomNode()] as $provider) {
             if (!$provider instanceof TriggerProviderInterface) {
                 throw new \InvalidArgumentException('Adaptador de trigger inválido.');
             }

@@ -80,6 +80,9 @@ class TriggerManager
 
     private function secrets(array $row): array
     {
+        if ($this->registry->definition($row['provider_key'])['secret_fields'] === []) {
+            return [];
+        }
         $credential = $this->credentials->getCredentialDecrypted($row['credential_id'] ?? '');
         if (!$credential) {
             throw new \InvalidArgumentException('Selecciona una credencial existente.');
@@ -159,7 +162,8 @@ class TriggerManager
         $row = ['provider_key' => $input['provider_key'], 'credential_id' => $input['credential_id'] ?? ''];
         $secrets = str_starts_with($row['provider_key'], 'notion_webhook_') && !$row['credential_id'] ? [] : $this->secrets($row);
         $serializedConfig = json_encode($config, JSON_THROW_ON_ERROR);
-        foreach ($secrets as $secret) {
+        foreach ($this->registry->definition($row['provider_key'])['secret_fields'] as $key => $field) {
+            $secret = $secrets[$key] ?? null;
             if (is_string($secret) && strlen($secret) >= 8 && str_contains($serializedConfig, $secret)) {
                 throw new \InvalidArgumentException('Los secretos deben permanecer exclusivamente en la credencial.');
             }
@@ -176,18 +180,41 @@ class TriggerManager
     public function activate(string $id): void
     {
         $row = $this->get($id);
-        if ((bool)$row['enabled']) {
-            return; // Activation is idempotent: never reset a live polling cursor.
+        $this->db->beginTransaction();
+        try {
+            $this->query('UPDATE workflows SET is_active=is_active WHERE id=?', [$row['workflow_id']]);
+            // Shopify signs the body, not routing headers. A secret belongs to one active
+            // receiver/app/shop/topic; serialize activation before comparing credentials.
+            if (str_starts_with($row['provider_key'], 'shopify_')) {
+                $this->query("UPDATE trigger_configs SET version=version WHERE provider_key LIKE 'shopify_%'");
+            }
+            $this->query('UPDATE trigger_configs SET version=version WHERE id=?', [$id]);
+            $row = $this->get($id);
+            if (!(bool)$row['enabled']) {
+                $this->boundWorkflow($row);
+                $secrets = $this->secrets($row);
+                $definition = $this->registry->definition($row['provider_key']);
+                if ($definition['transport'] === 'webhook' && empty($row['callback_url'])) {
+                    throw new \InvalidArgumentException('Falta la URL pública HTTPS.');
+                }
+                if (str_starts_with($row['provider_key'], 'shopify_')) {
+                    $others = $this->query("SELECT * FROM trigger_configs WHERE enabled=1 AND provider_key LIKE 'shopify_%' AND id<>?", [$id])->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($others as $other) {
+                        $otherSecrets = $this->secrets($other);
+                        if (hash_equals(hash('sha256', $secrets['app_secret']), hash('sha256', $otherSecrets['app_secret']))) {
+                            throw new \InvalidArgumentException('Shopify requiere una app/secreto exclusivo por tienda y receptor activo.');
+                        }
+                    }
+                }
+                $state = $this->credentials->encrypt(['activated_at' => gmdate('Y-m-d\TH:i:s\Z', $this->now())]);
+                $status = $definition['transport'] === 'webhook' ? 'awaiting_event' : 'awaiting_baseline';
+                $this->query('UPDATE trigger_configs SET enabled=1,status=?,state_ciphertext=?,next_poll_at=?,version=version+1,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE id=? AND enabled=0', [$status,$state,$definition['transport'] === 'polling' ? $this->now() : null,$id]);
+            }
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-        $this->boundWorkflow($row);
-        $this->secrets($row);
-        $definition = $this->registry->definition($row['provider_key']);
-        if ($definition['transport'] === 'webhook' && empty($row['callback_url'])) {
-            throw new \InvalidArgumentException('Falta la URL pública HTTPS.');
-        }
-        $state = $this->credentials->encrypt(['activated_at' => gmdate('Y-m-d\TH:i:s\Z', $this->now())]);
-        $status = $definition['transport'] === 'webhook' ? 'awaiting_event' : 'awaiting_baseline';
-        $this->query('UPDATE trigger_configs SET enabled=1,status=?,state_ciphertext=?,next_poll_at=?,version=version+1,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE id=? AND enabled=0', [$status,$state,$definition['transport'] === 'polling' ? $this->now() : null,$id]);
     }
 
     public function pause(string $id): void

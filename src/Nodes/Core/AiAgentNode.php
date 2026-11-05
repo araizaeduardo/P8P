@@ -3,6 +3,7 @@
 namespace P8P\Nodes\Core;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\ClientException;
 use InvalidArgumentException;
 use P8P\Interfaces\NodeInterface;
@@ -10,6 +11,10 @@ use RuntimeException;
 
 class AiAgentNode implements NodeInterface
 {
+    public function __construct(private ?array $modelProviders = null, private ?ClientInterface $client = null)
+    {
+    }
+
     public function getSchema(): array
     {
         return [
@@ -21,6 +26,14 @@ class AiAgentNode implements NodeInterface
             'is_start' => false,
             'help_text' => 'Define las instrucciones base del modelo en el Prompt del Sistema. Puedes pasar datos de contexto o entradas del usuario dinámicamente usando {{user_message}} o {{variable}}.',
             'parameters' => [
+                'user_prompt' => [
+                    'type' => 'textarea', 'required' => false, 'label' => 'Mensaje del usuario: OpenAI / Claude (opcional)',
+                    'placeholder' => '{{user_message}}'
+                ],
+                'messages' => [
+                    'type' => 'textarea', 'required' => false, 'label' => 'Historial JSON opcional (OpenAI / Claude)',
+                    'placeholder' => '[{"role":"user","content":"Hola"}]'
+                ],
                 'system_prompt' => [
                     'type' => 'textarea',
                     'required' => true,
@@ -71,7 +84,56 @@ class AiAgentNode implements NodeInterface
         }
 
         $provider = $modelConfig['provider'] ?? 'ollama';
-        $client = new Client(['timeout' => 30]);
+        $client = $this->client ?? new Client(['timeout' => 30]);
+
+        if (in_array($provider, ['openai', 'anthropic'], true)) {
+            // Existing MCP nodes provide descriptors, not an executable tool-call protocol.
+            if (!empty($subConnections['tools'])) {
+                throw new InvalidArgumentException('Este agente todavía no ejecuta llamadas de herramientas; desconecta el puerto Tools para usar este modelo.');
+            }
+            if (!is_string($systemPrompt) || strlen($systemPrompt) > 131072) {
+                throw new InvalidArgumentException('Prompt del sistema inválido o demasiado grande.');
+            }
+            $messages = $parameters['messages'] ?? null;
+            if ($messages !== null && $messages !== '') {
+                try {
+                    $messages = is_string($messages) ? json_decode($messages, true, 32, JSON_THROW_ON_ERROR) : $messages;
+                } catch (\JsonException $e) {
+                    throw new InvalidArgumentException('Historial de mensajes JSON inválido.');
+                }
+                if (!is_array($messages) || !array_is_list($messages)) {
+                    throw new InvalidArgumentException('El historial debe ser una lista de mensajes.');
+                }
+            } else {
+                $input = $parameters['user_prompt'] ?? $context['user_message'] ?? null;
+                if ($input === '') {
+                    $input = $context['user_message'] ?? null;
+                }
+                if ($input === null || $input === '') {
+                    foreach (array_reverse($context, true) as $id => $output) {
+                        if (str_starts_with((string)$id, '_') || !is_array($output)) {
+                            continue;
+                        }
+                        $input = $output['user_message'] ?? $output['value'] ?? $output['data']['title'] ?? null;
+                        if ($input !== null) {
+                            break;
+                        }
+                    }
+                }
+                if ($input === null) {
+                    $input = $userPrompt;
+                }
+                if (!is_string($input) || $input === '') {
+                    throw new InvalidArgumentException('El mensaje del usuario debe ser texto no vacío.');
+                }
+                $messages = [['role' => 'user', 'content' => $input]];
+            }
+            array_unshift($messages, ['role' => 'system', 'content' => $systemPrompt]);
+            $modelNode = $this->modelProviders[$provider] ?? ($provider === 'openai'
+                ? new \P8P\Nodes\Premium\OpenAIChatModelNode()
+                : new \P8P\Nodes\Premium\AnthropicClaudeModelNode());
+            return $modelNode->generate($modelConfig, $messages);
+        }
 
         // --- PROVEEDOR: GOOGLE GEMINI ---
         if ($provider === 'gemini') {

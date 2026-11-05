@@ -288,21 +288,7 @@ class AwsS3Node implements NodeInterface
     // AWS official single-chunk SigV4 algorithm; URI is already encoded once, never normalized.
     private function authorization(string $method, string $path, string $query, array $headers, string $payloadHash, string $region, array $credentials): string
     {
-        ksort($headers, SORT_STRING);
-        $canonicalHeaders = '';
-        foreach ($headers as $key => $value) {
-            $canonicalHeaders .= strtolower($key) . ':' . preg_replace('/[ \t]+/', ' ', trim($value)) . "\n";
-        }
-        $signedHeaders = implode(';', array_keys($headers));
-        $canonical = $method . "\n" . $path . "\n" . $query . "\n" . $canonicalHeaders . "\n" . $signedHeaders . "\n" . $payloadHash;
-        $date = substr($headers['x-amz-date'], 0, 8);
-        $scope = $date . '/' . $region . '/s3/aws4_request';
-        $toSign = "AWS4-HMAC-SHA256\n" . $headers['x-amz-date'] . "\n" . $scope . "\n" . hash('sha256', $canonical);
-        $key = hash_hmac('sha256', $date, 'AWS4' . $credentials['secret_access_key'], true);
-        foreach ([$region, 's3', 'aws4_request'] as $part) {
-            $key = hash_hmac('sha256', $part, $key, true);
-        }
-        return 'AWS4-HMAC-SHA256 Credential=' . $credentials['access_key_id'] . '/' . $scope . ',SignedHeaders=' . $signedHeaders . ',Signature=' . hash_hmac('sha256', $toSign, $key);
+        return \P8P\Core\AwsSignatureV4::authorization($method, $path, $query, $headers, $payloadHash, $region, $credentials);
     }
 
     private function parseList(string $body): array
