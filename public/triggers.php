@@ -57,6 +57,15 @@ try {
 } catch (InvalidArgumentException | JsonException $e) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => $e instanceof JsonException ? 'JSON inválido.' : $e->getMessage()]);
+} catch (PDOException $e) {
+    $missingSchema = in_array((string)$e->getCode(), ['42S02', '42S22'], true);
+    http_response_code($missingSchema ? 503 : 500);
+    echo json_encode([
+        'success' => false,
+        'error' => $missingSchema
+            ? 'Falta preparar las tablas de Triggers. El administrador debe ejecutar la migración database/migrations/20261025_triggers.php --apply desde la raíz de P8P, con PHP CLI.'
+            : 'No se pudo acceder al almacenamiento de Triggers. Comprueba la conexión y los permisos de la base de datos.'
+    ]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'No se pudo administrar el trigger. Comprueba la migración de triggers y la configuración del servidor.']);

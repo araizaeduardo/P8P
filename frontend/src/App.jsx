@@ -402,7 +402,7 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition"
             >
               <Plus className="w-3.5 h-3.5" />
-              Agregar Nodo
+              Nodo
             </button>
 
             {/* Nuevo workflow */}
@@ -441,7 +441,7 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition"
             >
               <Key className="w-3.5 h-3.5 text-indigo-400" />
-              Credenciales
+              Llaves
             </button>
 
             <button
@@ -467,7 +467,7 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition shadow-lg shadow-emerald-900/20"
             >
               <Play className="w-3.5 h-3.5" />
-              {isRunning ? 'Ejecutando...' : 'Test Workflow'}
+              {isRunning ? 'Ejecutando...' : 'Test'}
             </button>
 
             <div className="h-5 w-[1px] bg-slate-800 mx-1" />
