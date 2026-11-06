@@ -34,7 +34,10 @@ try {
     }
     $db = Database::getConnection(require __DIR__ . '/../config/database.php');
     $result = (new TriggerManager($db, new CredentialManager($db)))->receive($_GET['trigger_id'], [
-        'method' => $_SERVER['REQUEST_METHOD'], 'headers' => $headers, 'query' => $_GET, 'raw_body' => $raw]);
+        'method' => $_SERVER['REQUEST_METHOD'], 'headers' => $headers, 'query' => $_GET,
+        // PHP consumes multipart bodies before php://input. Only untrusted scalar IDs
+        // are used by adapters; uploaded server files are deliberately never forwarded.
+        'form_fields' => $_POST, 'raw_body' => $raw]);
     http_response_code($result['status'] ?? 200);
     header('Content-Type: ' . ($result['content_type'] ?? 'text/plain'));
     echo $result['body'] ?? '';

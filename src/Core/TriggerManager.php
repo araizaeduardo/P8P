@@ -260,6 +260,10 @@ class TriggerManager
         if (!(bool)$row['enabled'] && str_starts_with($row['provider_key'], 'notion_webhook_') && in_array($row['status'], ['draft', 'awaiting_verification'], true)) {
             return $this->notionSetup($row, $request);
         }
+        $definition = $this->registry->definition($row['provider_key']);
+        if (!(bool)$row['enabled'] && ($definition['setup_when_disabled'] ?? false) === true && $row['status'] === 'draft') {
+            return $this->setupHandshake($row, $request);
+        }
         if (!(bool)$row['enabled']) {
             throw new \InvalidArgumentException('Receptor desactivado.');
         }
@@ -273,7 +277,31 @@ class TriggerManager
             throw new \RuntimeException('Respuesta de webhook inválida.');
         }
         $this->commitEvents($row, $result['events'], null, null);
-        unset($result['events']);
+        unset($result['events'], $result['challenge']);
+        return $result;
+    }
+
+    /** URL verification may complete in a draft, but can never admit an event. */
+    private function setupHandshake(array $row, array $request): array
+    {
+        $this->boundWorkflow($row);
+        $definition = $this->registry->definition($row['provider_key']);
+        if ($definition['transport'] !== 'webhook') {
+            throw new \InvalidArgumentException('La verificación inicial requiere un webhook.');
+        }
+        $request['callback_url'] = $row['callback_url'];
+        $request['setup_allowed'] = true;
+        $result = $this->registry->provider($row['provider_key'])->verify(
+            $row['provider_key'],
+            json_decode($row['config_json'], true, 512, JSON_THROW_ON_ERROR),
+            $this->secrets($row),
+            $request,
+            $this->now()
+        );
+        if (($result['challenge'] ?? false) !== true || ($result['events'] ?? null) !== []) {
+            throw new \InvalidArgumentException('Un borrador solo acepta el desafío inicial, sin eventos.');
+        }
+        unset($result['events'], $result['challenge']);
         return $result;
     }
 
