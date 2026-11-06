@@ -23,12 +23,13 @@ if (PHP_SAPI !== 'cli') {
 try {
     $db = Database::getConnection(require __DIR__ . '/../config/database.php');
     $credentials = new CredentialManager($db);
+    $expiredMemory = (new \P8P\Core\ConversationMemoryStore($db, $credentials))->cleanup();
     $queue = new QueueManager($db);
     $engine = new Engine();
     (new NodeRegistry($engine))->autoDiscover();
     $polling = (new TriggerManager($db, $credentials))->pollDue(5);
     $jobs = (new WorkflowWorker($db, $queue, $credentials, $engine))->run(5);
-    $result = ['success' => true, 'polling' => $polling, 'jobs' => $jobs];
+    $result = ['success' => true, 'polling' => $polling, 'jobs' => $jobs, 'expired_memory_removed' => $expiredMemory];
     echo json_encode($result, JSON_THROW_ON_ERROR) . (PHP_SAPI === 'cli' ? "\n" : '');
 } catch (Throwable $e) {
     if (PHP_SAPI !== 'cli') {

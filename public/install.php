@@ -97,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' &&$step === 2) {
             $pdo->exec($schema);
             require_once __DIR__ . '/../vendor/autoload.php';
             \P8P\Core\TriggerSchema::install($pdo);
+            \P8P\Core\ConversationMemorySchema::install($pdo);
 
             // 4. Generar archivo .env unificado
             $appSecret = base64_encode(random_bytes(32));

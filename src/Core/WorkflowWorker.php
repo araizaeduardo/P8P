@@ -121,7 +121,7 @@ class WorkflowWorker
         $this->eventStatus($eventId, $job['id'], 'processing');
         $event = $stored['event'];
         $result = $checkpoint === null
-            ? $this->engine->executeWorkflow($workflow, ['_trigger' => $event, 'trigger' => $event,
+            ? $this->engine->executeWorkflow($workflow, ['_workflow_id' => $job['workflow_id'], '_trigger' => $event, 'trigger' => $event,
                 'webhook' => ['payload' => $event['data']]])
             : $this->engine->resumeWorkflow($workflow, $checkpoint);
         $failed = $this->hasFailure($result);
@@ -208,7 +208,7 @@ class WorkflowWorker
             unset($node);
         }
         $result = $checkpoint === null
-            ? $this->engine->executeWorkflow($workflow)
+            ? $this->engine->executeWorkflow($workflow, ['_workflow_id' => $job['workflow_id']])
             : $this->engine->resumeWorkflow($workflow, $checkpoint);
         if ($this->hasFailure($result)) {
             $this->queue->markFailed($job['id'], 'Falló la ejecución del workflow.', $job['claim_token'], $result);

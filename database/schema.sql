@@ -86,3 +86,15 @@ CREATE TABLE IF NOT EXISTS trigger_events (
             KEY idx_trigger_events_received (trigger_id, received_at),
             CONSTRAINT uq_trigger_event UNIQUE (trigger_id, event_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Historial cifrado por workflow/nodo de memoria y sesión
+CREATE TABLE IF NOT EXISTS conversation_memory (
+            scope_hash VARCHAR(64) NOT NULL,
+            session_hash VARCHAR(64) NOT NULL,
+            history_ciphertext LONGTEXT NULL,
+            version BIGINT NOT NULL DEFAULT 0,
+            expires_at BIGINT NOT NULL,
+            lease_token VARCHAR(64) NULL,
+            lease_until BIGINT NULL,
+            PRIMARY KEY (scope_hash, session_hash), KEY idx_memory_expiry (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

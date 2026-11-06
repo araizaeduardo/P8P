@@ -257,6 +257,7 @@ export default function App() {
     setExecutionResult(null);
 
     const payload = {
+      workflow_id: workflowId,
       nodes: nodes.map((node) => ({
         id: node.id,
         type: node.data.type,

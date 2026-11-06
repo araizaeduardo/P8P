@@ -84,6 +84,8 @@ class Engine
         }
         // También valida DAGs sin Loop para que Merge no espere ciclos indefinidamente.
         $this->validateLoopGraph($nodesById, $edges, $adjacencyList);
+        $memoryScope = is_string($workflowData['workflow_id'] ?? null) && $workflowData['workflow_id'] !== ''
+            ? $workflowData['workflow_id'] : WorkflowRuntime::hash($workflowData);
         $frames = isset($checkpoint['frames']) ? CheckpointCodec::decode($checkpoint['frames']) : [];
         $executions = $checkpoint['executions'] ?? 0;
         $resumeAt = $checkpoint['resume_at'] ?? 0;
@@ -111,7 +113,7 @@ class Engine
             return $found;
         };
         $runBlock = function (array $roots, array $context, array &$history, array $path = []) use (
-            &$runBlock, &$frames, $scope, $incoming, $adjacencyList, $nodesById, $subConnections, $tick
+            &$runBlock, &$frames, $scope, $incoming, $adjacencyList, $nodesById, $subConnections, $tick, $memoryScope
         ): array {
             $key = json_encode($path, JSON_THROW_ON_ERROR);
             if (!isset($frames[$key])) {
@@ -242,7 +244,12 @@ class Engine
                                 }
                                 $tick();
                                 $subParams = ExpressionEvaluator::evaluate($nodesById[$sourceId]['data']['parameters'] ?? [], $frame['context']);
-                                $subOutput = $instance->execute($subParams, $frame['context']);
+                                $subContext = $frame['context'];
+                                if ($instance instanceof \P8P\Nodes\Core\SimpleMemoryNode) {
+                                    $subContext['_memory_scope'] = $frame['context']['_workflow_id'] ?? $memoryScope;
+                                    $subContext['_memory_node_id'] = $sourceId;
+                                }
+                                $subOutput = $instance->execute($subParams, $subContext);
                                 if ($path !== [] && ($subOutput['success'] ?? null) === false) {
                                     throw new RuntimeException("El subnodo {$sourceId} devolvió success=false.");
                                 }

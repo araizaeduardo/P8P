@@ -8,7 +8,21 @@
         return;
     }
 
-    const sessionId = 'session_' + Math.random().toString(36).substring(2, 9);
+    const randomBytes = new Uint8Array(32);
+    window.crypto.getRandomValues(randomBytes);
+    let sessionId = 'session_' + Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    // Preserve this tab's conversation on reload, isolated by backend and workflow.
+    try {
+        const sessionKey = `p8p_chat_session:${baseUrl}:${workflowId}`;
+        const savedSession = window.sessionStorage.getItem(sessionKey);
+        if (/^session_[a-f0-9]{64}$/.test(savedSession || '')) {
+            sessionId = savedSession;
+        } else {
+            window.sessionStorage.setItem(sessionKey, sessionId);
+        }
+    } catch {
+        // Browsers denying storage keep an independent in-memory session for this page.
+    }
 
     // Inyectar Estilos CSS
     const style = document.createElement('style');

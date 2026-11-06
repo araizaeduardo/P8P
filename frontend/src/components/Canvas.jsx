@@ -10,9 +10,14 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode.jsx';
+import DeletableEdge from './DeletableEdge.jsx';
 
 const nodeTypes = {
     customNode: CustomNode,
+};
+
+const edgeTypes = {
+    default: DeletableEdge,
 };
 
 export default function Canvas({ nodes, setNodes, edges, setEdges, onNodeSelect }) {
@@ -43,6 +48,7 @@ export default function Canvas({ nodes, setNodes, edges, setEdges, onNodeSelect 
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
