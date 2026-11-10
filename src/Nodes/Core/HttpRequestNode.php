@@ -3,11 +3,30 @@
 namespace P8P\Nodes\Core;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\HandlerStack;
+use InvalidArgumentException;
+use P8P\Core\BoundedSink;
+use P8P\Core\UrlGuard;
 use P8P\Interfaces\NodeInterface;
+use RuntimeException;
+use Throwable;
 
 class HttpRequestNode implements NodeInterface
 {
+    /** Tope de la respuesta descargada (1 MiB). */
+    private const MAX_RESPONSE_BYTES = 1048576;
+
+    private UrlGuard $guard;
+    private ?Client $client;
+
+    /** Argumentos opcionales: NodeRegistry instancia el nodo sin ellos; las pruebas los inyectan. */
+    public function __construct(?UrlGuard $guard = null, ?Client $client = null)
+    {
+        $this->guard = $guard ?? new UrlGuard();
+        $this->client = $client;
+    }
+
     public function getSchema(): array
     {
         return [
@@ -65,8 +84,39 @@ class HttpRequestNode implements NodeInterface
         $rawHeaders = $parameters['headers'] ?? '';
         $rawBody = $parameters['body'] ?? '';
 
-        $client = new Client(['timeout' => 30]);
-        $options = [];
+        if (!is_string($url) || !in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            throw new InvalidArgumentException('HTTP Request: URL o método inválido.');
+        }
+
+        // SSRF: el destino debe resolver solo a direcciones públicas. La conexión se fija a la
+        // IP validada para que un segundo lookup no pueda devolver otra (DNS rebinding).
+        try {
+            $target = $this->guard->check($url);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException('HTTP Request: destino no permitido. ' . $e->getMessage());
+        } catch (RuntimeException $e) {
+            throw new RuntimeException('HTTP Request: ' . $e->getMessage());
+        }
+
+        $client = $this->client ?? new Client(['handler' => HandlerStack::create(new CurlHandler())]);
+        $sink = BoundedSink::create(self::MAX_RESPONSE_BYTES);
+        $curl = [CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS];
+        if ($target['resolve'] !== null) {
+            $curl[CURLOPT_RESOLVE] = [$target['resolve']];
+        }
+        $options = [
+            'timeout' => 30,
+            'connect_timeout' => 10,
+            'read_timeout' => 30,
+            'verify' => true,
+            // Sin redirects (cada salto necesitaría su propia validación) y sin proxy de entorno,
+            // que anularía la IP fijada.
+            'allow_redirects' => false,
+            'proxy' => '',
+            'http_errors' => false,
+            'sink' => $sink,
+            'curl' => $curl,
+        ];
 
         // 1. Procesar Headers
         $headers = [];
@@ -101,26 +151,37 @@ class HttpRequestNode implements NodeInterface
 
         try {
             $response = $client->request($method, $url, $options);
-            $statusCode = $response->getStatusCode();
-            $responseContent = (string)$response->getBody();
+        } catch (Throwable $e) {
+            // El mensaje original puede incluir la URL completa (con tokens en la query): no se propaga.
+            if ($sink->exceeded()) {
+                throw new RuntimeException('HTTP Request: la respuesta supera el límite de 1 MiB.');
+            }
+            throw new RuntimeException('HTTP Request: fallo de transporte (' . (new \ReflectionClass($e))->getShortName() . ').');
+        }
 
-            $decodedResponse = json_decode($responseContent, true);
-            $data = (json_last_error() === JSON_ERROR_NONE) ? $decodedResponse : $responseContent;
+        $statusCode = $response->getStatusCode();
+        $responseContent = (string)$response->getBody();
 
-            return [
-                'success' => true,
-                'status_code' => $statusCode,
-                'data' => $data
-            ];
-        } catch (RequestException $e) {
-            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 500;
-            $errorBody = $e->hasResponse() ? (string)$e->getResponse()->getBody() : $e->getMessage();
-
+        if ($statusCode >= 400) {
             return [
                 'success' => false,
                 'status_code' => $statusCode,
-                'error' => $errorBody
+                // Acotado: este texto puede acabar en una respuesta pública del chat.
+                'error' => mb_strcut($responseContent, 0, 1024)
             ];
         }
+
+        $decodedResponse = json_decode($responseContent, true);
+        $data = (json_last_error() === JSON_ERROR_NONE) ? $decodedResponse : $responseContent;
+
+        $result = [
+            'success' => true,
+            'status_code' => $statusCode,
+            'data' => $data
+        ];
+        if ($statusCode >= 300) {
+            $result['location'] = $response->getHeaderLine('Location');
+        }
+        return $result;
     }
 }
