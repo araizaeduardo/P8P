@@ -69,6 +69,8 @@ try {
         exit;
     }
 } catch (\Throwable $e) {
+    // El detalle (rutas, SQL, descifrado) va al log del servidor, no al cliente.
+    error_log('P8P credentials.php: ' . get_class($e) . ': ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'No se pudo completar la operación con credenciales.']);
 }

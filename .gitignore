@@ -65,3 +65,6 @@ coverage/
 
 # Supabase (archivos locales generados)
 supabase/.temp/
+
+# Binario de build (Mach-O) que no pertenece al repo
+/spc
